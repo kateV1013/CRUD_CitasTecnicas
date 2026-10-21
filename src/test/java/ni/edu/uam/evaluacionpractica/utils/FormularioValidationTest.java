@@ -1,11 +1,11 @@
 package ni.edu.uam.evaluacionpractica.utils;
 
-import javafx.application.Platform;
 import javafx.scene.control.TextField;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.TextArea;
 import javafx.fxml.FXMLLoader;
+import javafx.scene.layout.BorderPane;
 import ni.edu.uam.evaluacionpractica.modelocrud.Controllers.ClienteController;
 import ni.edu.uam.evaluacionpractica.modelocrud.Controllers.CitaTecnicaController;
 import ni.edu.uam.evaluacionpractica.modelocrud.model.CitaTecnica;
@@ -23,21 +23,16 @@ class FormularioValidationTest {
     static void iniciarJavaFx() throws Exception {
         assertTrue(System.getenv("DB_URL").matches(
                 "jdbc:postgresql://localhost:5432/gestion_citas_auditoria_[a-z0-9]+"));
-        CountDownLatch inicio = new CountDownLatch(1);
-        Platform.startup(inicio::countDown);
-        assertTrue(inicio.await(10, TimeUnit.SECONDS));
+        JavaFxTestSupport.iniciar();
     }
 
     @AfterAll
     static void cerrar() {
-        Platform.exit();
         ConexionBD.cerrar();
     }
 
     private void enJavaFx(Callable<Void> tarea) throws Exception {
-        FutureTask<Void> resultado = new FutureTask<>(tarea);
-        Platform.runLater(resultado);
-        resultado.get(15, TimeUnit.SECONDS);
+        JavaFxTestSupport.enJavaFx(tarea);
     }
 
     @Test
@@ -50,9 +45,15 @@ class FormularioValidationTest {
 
     @Test
     void formularioRechazaFechaPasadaFechaImposibleYHoraInvalida() throws Exception {
+        FXMLLoader loader = JavaFxTestSupport.enJavaFx(() -> {
+            FXMLLoader vista = new FXMLLoader(HelloApplication.class.getResource("Views/CitaTecnicaView.fxml"));
+            vista.load();
+            return vista;
+        });
+        BorderPane panel = loader.getRoot();
+        JavaFxTestSupport.esperarCarga(panel.getCenter());
         enJavaFx(() -> {
-            FXMLLoader loader = new FXMLLoader(HelloApplication.class.getResource("Views/CitaTecnicaView.fxml"));
-            javafx.scene.Parent raiz = loader.load();
+            javafx.scene.Parent raiz = loader.getRoot();
             new javafx.scene.Scene(raiz);
             raiz.applyCss();
             raiz.layout();

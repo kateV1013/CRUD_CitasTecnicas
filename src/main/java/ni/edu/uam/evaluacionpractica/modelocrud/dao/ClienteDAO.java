@@ -50,8 +50,8 @@ public class ClienteDAO implements CrudRepository<Cliente, Integer> {
 
     @Override
     public boolean insertar(Cliente cliente) throws SQLException {
-        Connection cn = ConexionBD.getConexion();
-        try (PreparedStatement ps = cn.prepareStatement(
+        try (Connection cn = ConexionBD.abrirConexion();
+             PreparedStatement ps = cn.prepareStatement(
                 SQL_INSERT, Statement.RETURN_GENERATED_KEYS)) {
 
             ps.setString(1, cliente.getNombres());
@@ -77,8 +77,8 @@ public class ClienteDAO implements CrudRepository<Cliente, Integer> {
         if (cliente.getIdCliente() == null) {
             throw new SQLException("No se puede actualizar un cliente sin id_cliente.");
         }
-        Connection cn = ConexionBD.getConexion();
-        try (PreparedStatement ps = cn.prepareStatement(SQL_UPDATE)) {
+        try (Connection cn = ConexionBD.abrirConexion();
+             PreparedStatement ps = cn.prepareStatement(SQL_UPDATE)) {
 
             ps.setString(1, cliente.getNombres());
             ps.setString(2, cliente.getApellidos());
@@ -93,8 +93,8 @@ public class ClienteDAO implements CrudRepository<Cliente, Integer> {
 
     @Override
     public boolean eliminar(Integer id) throws SQLException {
-        Connection cn = ConexionBD.getConexion();
-        try (PreparedStatement ps = cn.prepareStatement(SQL_DELETE)) {
+        try (Connection cn = ConexionBD.abrirConexion();
+             PreparedStatement ps = cn.prepareStatement(SQL_DELETE)) {
             ps.setInt(1, id);
             return ps.executeUpdate() > 0;
         }
@@ -102,8 +102,8 @@ public class ClienteDAO implements CrudRepository<Cliente, Integer> {
 
     @Override
     public Optional<Cliente> buscarPorId(Integer id) throws SQLException {
-        Connection cn = ConexionBD.getConexion();
-        try (PreparedStatement ps = cn.prepareStatement(SQL_FIND_BY_ID)) {
+        try (Connection cn = ConexionBD.abrirConexion();
+             PreparedStatement ps = cn.prepareStatement(SQL_FIND_BY_ID)) {
             ps.setInt(1, id);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? Optional.of(mapear(rs)) : Optional.empty();
@@ -114,8 +114,8 @@ public class ClienteDAO implements CrudRepository<Cliente, Integer> {
     @Override
     public List<Cliente> listarTodos() throws SQLException {
         List<Cliente> lista = new ArrayList<>();
-        Connection cn = ConexionBD.getConexion();
-        try (PreparedStatement ps = cn.prepareStatement(SQL_FIND_ALL);
+        try (Connection cn = ConexionBD.abrirConexion();
+             PreparedStatement ps = cn.prepareStatement(SQL_FIND_ALL);
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 lista.add(mapear(rs));
@@ -131,9 +131,8 @@ public class ClienteDAO implements CrudRepository<Cliente, Integer> {
         }
         String patron = "%" + termino.trim() + "%";
         List<Cliente> lista = new ArrayList<>();
-        Connection cn = ConexionBD.getConexion();
-
-        try (PreparedStatement ps = cn.prepareStatement(SQL_BUSCAR)) {
+        try (Connection cn = ConexionBD.abrirConexion();
+             PreparedStatement ps = cn.prepareStatement(SQL_BUSCAR)) {
             ps.setString(1, patron);
             ps.setString(2, patron);
             ps.setString(3, patron);
@@ -148,8 +147,8 @@ public class ClienteDAO implements CrudRepository<Cliente, Integer> {
 
     public boolean existeCorreo(String correo) throws SQLException {
         if (correo == null || correo.isBlank()) return false;
-        Connection cn = ConexionBD.getConexion();
-        try (PreparedStatement ps = cn.prepareStatement(SQL_EXISTS_CORREO)) {
+        try (Connection cn = ConexionBD.abrirConexion();
+             PreparedStatement ps = cn.prepareStatement(SQL_EXISTS_CORREO)) {
             ps.setString(1, correo.trim());
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
@@ -159,8 +158,8 @@ public class ClienteDAO implements CrudRepository<Cliente, Integer> {
 
     public boolean existeCorreoEnOtro(String correo, Integer idExcluir) throws SQLException {
         if (correo == null || correo.isBlank()) return false;
-        Connection cn = ConexionBD.getConexion();
-        try (PreparedStatement ps = cn.prepareStatement(SQL_EXISTS_CORREO_OTRO)) {
+        try (Connection cn = ConexionBD.abrirConexion();
+             PreparedStatement ps = cn.prepareStatement(SQL_EXISTS_CORREO_OTRO)) {
             ps.setString(1, correo.trim());
             ps.setInt(2, idExcluir);
             try (ResultSet rs = ps.executeQuery()) {
@@ -172,8 +171,8 @@ public class ClienteDAO implements CrudRepository<Cliente, Integer> {
 
     public boolean tieneCitasAsociadas(Integer idCliente) throws SQLException {
         String sql = "SELECT 1 FROM cita_tecnica WHERE id_cliente = ? LIMIT 1";
-        Connection cn = ConexionBD.getConexion();
-        try (PreparedStatement ps = cn.prepareStatement(sql)) {
+        try (Connection cn = ConexionBD.abrirConexion();
+             PreparedStatement ps = cn.prepareStatement(sql)) {
             ps.setInt(1, idCliente);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();

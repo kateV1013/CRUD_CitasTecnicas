@@ -13,13 +13,15 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextFormatter;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
 import ni.edu.uam.evaluacionpractica.modelocrud.dao.ClienteDAO;
 import ni.edu.uam.evaluacionpractica.modelocrud.model.Cliente;
 import ni.edu.uam.evaluacionpractica.utils.AlertUtil;
 import ni.edu.uam.evaluacionpractica.utils.Validador;
+import ni.edu.uam.evaluacionpractica.utils.TareasBD;
 
 import java.sql.SQLException;
-import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.function.UnaryOperator;
@@ -27,6 +29,8 @@ import java.util.function.UnaryOperator;
 
 public class ClienteController {
 
+    @FXML private BorderPane vista;
+    @FXML private HBox progreso;
     @FXML private TextField txtNombres;
     @FXML private TextField txtApellidos;
     @FXML private TextField txtTelefono;
@@ -47,11 +51,17 @@ public class ClienteController {
     @FXML private TableColumn<Cliente, String> colActivo;
 
     private final ClienteDAO clienteDAO = new ClienteDAO();
+    private final TareasBD tareas = new TareasBD();
     private final ObservableList<Cliente> clientes = FXCollections.observableArrayList();
     private Cliente clienteSeleccionado;
 
     @FXML
     public void initialize() {
+        // TabPane administra disable en la raíz; se bloquea su contenido por separado.
+        vista.getLeft().disableProperty().bind(tareas.ocupadoProperty());
+        vista.getCenter().disableProperty().bind(tareas.ocupadoProperty());
+        progreso.visibleProperty().bind(tareas.ocupadoProperty());
+        progreso.managedProperty().bind(progreso.visibleProperty());
         configurarColumnas();
         tblClientes.setItems(clientes);
 
@@ -84,21 +94,24 @@ public class ClienteController {
             return;
         }
         Cliente nuevo = leerFormulario();
-        try {
+        tareas.ejecutar(() -> {
             if (clienteDAO.existeCorreo(nuevo.getCorreo())) {
+                return ResultadoCliente.CORREO_DUPLICADO;
+            }
+            return clienteDAO.insertar(nuevo) ? ResultadoCliente.EXITO : ResultadoCliente.SIN_CAMBIOS;
+        }, resultado -> {
+            if (resultado == ResultadoCliente.CORREO_DUPLICADO) {
                 invalido("Ya existe un cliente registrado con ese correo electrónico.", txtCorreo);
                 return;
             }
-            if (clienteDAO.insertar(nuevo)) {
+            if (resultado == ResultadoCliente.EXITO) {
                 AlertUtil.mostrarInfo("Cliente registrado", "El cliente se registró correctamente.");
                 limpiarFormulario();
                 recargarTabla();
             } else {
                 AlertUtil.mostrarError("Error", "No se pudo registrar el cliente.");
             }
-        } catch (SQLException e) {
-            manejarErrorSQL(e, "registrar");
-        }
+        }, error -> manejarErrorSQL(error, "registrar"));
     }
 
     @FXML
@@ -111,21 +124,24 @@ public class ClienteController {
             return;
         }
         Cliente editado = leerFormulario();
-        try {
+        tareas.ejecutar(() -> {
             if (clienteDAO.existeCorreoEnOtro(editado.getCorreo(), editado.getIdCliente())) {
+                return ResultadoCliente.CORREO_DUPLICADO;
+            }
+            return clienteDAO.actualizar(editado) ? ResultadoCliente.EXITO : ResultadoCliente.SIN_CAMBIOS;
+        }, resultado -> {
+            if (resultado == ResultadoCliente.CORREO_DUPLICADO) {
                 invalido("Otro cliente ya utiliza ese correo electrónico.", txtCorreo);
                 return;
             }
-            if (clienteDAO.actualizar(editado)) {
+            if (resultado == ResultadoCliente.EXITO) {
                 AlertUtil.mostrarInfo("Cliente actualizado", "Los datos del cliente se actualizaron correctamente.");
                 limpiarFormulario();
                 recargarTabla();
             } else {
                 AlertUtil.mostrarError("Error", "No se pudo actualizar el cliente.");
             }
-        } catch (SQLException e) {
-            manejarErrorSQL(e, "actualizar");
-        }
+        }, error -> manejarErrorSQL(error, "actualizar"));
     }
 
     @FXML
@@ -135,27 +151,28 @@ public class ClienteController {
             return;
         }
         Integer id = clienteSeleccionado.getIdCliente();
-        try {
-            if (clienteDAO.tieneCitasAsociadas(id)) {
+        String nombre = clienteSeleccionado.getNombreCompleto();
+        tareas.ejecutar(() -> clienteDAO.tieneCitasAsociadas(id), tieneCitas -> {
+            if (tieneCitas) {
                 AlertUtil.mostrarAdvertencia("Eliminación no permitida",
                         "No se puede eliminar el cliente porque tiene citas técnicas asociadas.\n"
                                 + "Elimine primero sus citas y vuelva a intentarlo.");
                 return;
             }
             if (!AlertUtil.mostrarConfirmacion("Confirmar eliminación",
-                    "¿Desea eliminar definitivamente al cliente " + clienteSeleccionado.getNombreCompleto() + "?")) {
+                    "¿Desea eliminar definitivamente al cliente " + nombre + "?")) {
                 return;
             }
-            if (clienteDAO.eliminar(id)) {
-                AlertUtil.mostrarInfo("Cliente eliminado", "El cliente se eliminó correctamente.");
-                limpiarFormulario();
-                recargarTabla();
-            } else {
-                AlertUtil.mostrarError("Error", "No se pudo eliminar el cliente.");
-            }
-        } catch (SQLException e) {
-            manejarErrorSQL(e, "eliminar");
-        }
+            tareas.ejecutar(() -> clienteDAO.eliminar(id), eliminado -> {
+                if (eliminado) {
+                    AlertUtil.mostrarInfo("Cliente eliminado", "El cliente se eliminó correctamente.");
+                    limpiarFormulario();
+                    recargarTabla();
+                } else {
+                    AlertUtil.mostrarError("Error", "No se pudo eliminar el cliente.");
+                }
+            }, error -> manejarErrorSQL(error, "eliminar"));
+        }, error -> manejarErrorSQL(error, "eliminar"));
     }
 
     @FXML
@@ -179,8 +196,7 @@ public class ClienteController {
     private void recargarTabla() {
         Integer idSeleccionado = clienteSeleccionado != null ? clienteSeleccionado.getIdCliente() : null;
         String texto = txtBuscar.getText() == null ? "" : txtBuscar.getText().trim();
-        try {
-            List<Cliente> lista = texto.isEmpty() ? clienteDAO.listarTodos() : clienteDAO.buscar(texto);
+        tareas.ejecutar(() -> texto.isEmpty() ? clienteDAO.listarTodos() : clienteDAO.buscar(texto), lista -> {
             clientes.setAll(lista);
             lblTotal.setText("Total de registros: " + lista.size());
 
@@ -190,10 +206,10 @@ public class ClienteController {
                         .findFirst()
                         .ifPresent(c -> tblClientes.getSelectionModel().select(c));
             }
-        } catch (SQLException e) {
+        }, e -> {
             AlertUtil.mostrarError("Error de base de datos",
                     "No se pudieron cargar los clientes.\nDetalle: " + e.getMessage());
-        }
+        });
     }
 
     private void configurarColumnas() {
@@ -265,8 +281,8 @@ public class ClienteController {
     }
 
 
-    private void manejarErrorSQL(SQLException e, String accion) {
-        String estado = e.getSQLState();
+    private void manejarErrorSQL(Throwable e, String accion) {
+        String estado = e instanceof SQLException sql ? sql.getSQLState() : null;
         if ("23505".equals(estado)) {
             AlertUtil.mostrarError("Correo duplicado",
                     "Ya existe un cliente registrado con ese correo electrónico.");
@@ -279,6 +295,7 @@ public class ClienteController {
         }
     }
 
+    private enum ResultadoCliente { EXITO, CORREO_DUPLICADO, SIN_CAMBIOS }
 
     private void restringir(TextField campo, int maxLongitud, String regexPermitido) {
         UnaryOperator<TextFormatter.Change> filtro = cambio -> {

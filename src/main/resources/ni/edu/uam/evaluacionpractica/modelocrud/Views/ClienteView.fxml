@@ -6,6 +6,7 @@
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ProgressIndicator?>
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
 <?import javafx.scene.control.TextField?>
@@ -15,7 +16,7 @@
 <?import javafx.scene.layout.Priority?>
 <?import javafx.scene.layout.VBox?>
 
-<BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+<BorderPane fx:id="vista" xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
             fx:controller="ni.edu.uam.evaluacionpractica.modelocrud.Controllers.ClienteController"
             prefWidth="1200" prefHeight="740" style="-fx-font-family: 'Segoe UI'; -fx-font-size: 13px; -fx-text-fill: #23334b; -fx-accent: #0d9488; -fx-focus-color: #0d9488; -fx-faint-focus-color: #0d948822; -fx-background-color: #f0f5fa;">
     <padding>
@@ -90,6 +91,10 @@
             </TableView>
 
             <Label fx:id="lblTotal" style="-fx-text-fill: #0f766e; -fx-font-weight: bold; -fx-background-color: #d9f4ec; -fx-background-radius: 6; -fx-padding: 8 12;"/>
+            <HBox fx:id="progreso" alignment="CENTER_LEFT" spacing="8" visible="false" managed="false">
+                <ProgressIndicator prefWidth="20" prefHeight="20" maxWidth="20" maxHeight="20"/>
+                <Label text="Procesando datos..." style="-fx-text-fill: #0f766e;"/>
+            </HBox>
         </VBox>
     </center>
 </BorderPane>

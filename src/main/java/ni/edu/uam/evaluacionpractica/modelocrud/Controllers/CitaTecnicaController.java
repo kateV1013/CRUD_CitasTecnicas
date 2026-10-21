@@ -13,6 +13,8 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
 import javafx.util.StringConverter;
 import ni.edu.uam.evaluacionpractica.modelocrud.dao.CitaTecnicaDAO;
 import ni.edu.uam.evaluacionpractica.modelocrud.dao.ClienteDAO;
@@ -20,6 +22,7 @@ import ni.edu.uam.evaluacionpractica.modelocrud.model.CitaTecnica;
 import ni.edu.uam.evaluacionpractica.modelocrud.model.Cliente;
 import ni.edu.uam.evaluacionpractica.utils.AlertUtil;
 import ni.edu.uam.evaluacionpractica.utils.Validador;
+import ni.edu.uam.evaluacionpractica.utils.TareasBD;
 
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -36,9 +39,14 @@ public class CitaTecnicaController {
 
     private final CitaTecnicaDAO citaDAO = new CitaTecnicaDAO();
     private final ClienteDAO clienteDAO = new ClienteDAO();
+    private final TareasBD tareas = new TareasBD();
+    // Refrescar el desplegable no debe deshabilitarlo ni cerrar su ventana emergente.
+    private final TareasBD refrescoClientes = new TareasBD();
     private final ObservableList<CitaTecnica> citas = FXCollections.observableArrayList();
     private CitaTecnica citaSeleccionada;
 
+    @FXML private BorderPane vista;
+    @FXML private HBox progreso;
     @FXML private ComboBox<Cliente> cmbCliente;
     @FXML private DatePicker dpFecha;
     @FXML private TextField txtHora;
@@ -62,6 +70,15 @@ public class CitaTecnicaController {
 
     @FXML
     private void initialize() {
+        // TabPane administra disable en la raíz; se bloquea su contenido por separado.
+        vista.getLeft().disableProperty().bind(tareas.ocupadoProperty());
+        vista.getCenter().disableProperty().bind(tareas.ocupadoProperty());
+        progreso.visibleProperty().bind(tareas.ocupadoProperty().or(refrescoClientes.ocupadoProperty()));
+        progreso.managedProperty().bind(progreso.visibleProperty());
+        var sinSeleccion = tblCitas.getSelectionModel().selectedItemProperty().isNull();
+        btnGuardar.disableProperty().bind(sinSeleccion.not().or(refrescoClientes.ocupadoProperty()));
+        btnActualizar.disableProperty().bind(sinSeleccion.or(refrescoClientes.ocupadoProperty()));
+        btnEliminar.disableProperty().bind(sinSeleccion);
         configurarFecha(dpFecha);
         configurarFecha(dpFiltroFecha);
         cmbEstado.getItems().setAll(CitaTecnica.ESTADOS_PERMITIDOS);
@@ -78,7 +95,7 @@ public class CitaTecnicaController {
                 return null; // Solo se permite seleccionar clientes existentes.
             }
         });
-        cmbCliente.setOnShowing(event -> cargarClientes());
+        cmbCliente.setOnShowing(event -> cargarClientes(refrescoClientes));
 
         colId.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(cell.getValue().getIdCita()));
         colCliente.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getNombreCliente()));
@@ -111,13 +128,19 @@ public class CitaTecnicaController {
     }
 
     private void cargarClientes() {
-        Cliente seleccionado = cmbCliente.getValue();
-        try {
-            cmbCliente.getItems().setAll(clienteDAO.listarTodos());
+        cargarClientes(tareas);
+    }
+
+    private void cargarClientes(TareasBD ejecutor) {
+        if (refrescoClientes.ocupadoProperty().get()) return;
+        ejecutor.ejecutar(clienteDAO::listarTodos, resultado -> {
+            // Se conserva la selección actual, incluso si cambió durante la consulta.
+            Cliente seleccionado = cmbCliente.getValue();
+            cmbCliente.getItems().setAll(resultado);
             if (seleccionado != null) seleccionarCliente(seleccionado.getIdCliente());
-        } catch (SQLException e) {
+        }, e -> {
             mostrarErrorBD("No se pudo cargar la lista de clientes.", e);
-        }
+        });
     }
 
     private void seleccionarCliente(Integer idCliente) {
@@ -127,22 +150,20 @@ public class CitaTecnicaController {
     }
 
     private void cargarCitas() {
-        try {
+        LocalDate fecha = dpFiltroFecha.getValue();
+        String estado = cmbFiltroEstado.getValue();
+        tareas.ejecutar(() -> citaDAO.filtrar(fecha, estado), resultado -> {
             // Si falla la consulta, se conserva la lista que estaba en pantalla.
-            var resultado = citaDAO.filtrar(dpFiltroFecha.getValue(), cmbFiltroEstado.getValue());
             onLimpiar();
             citas.setAll(resultado);
             lblTotal.setText("Citas mostradas: " + citas.size());
-        } catch (SQLException e) {
+        }, e -> {
             mostrarErrorBD("No se pudo cargar la lista de citas.", e);
-        }
+        });
     }
 
     private void mostrarCita(CitaTecnica cita) {
         citaSeleccionada = cita;
-        btnGuardar.setDisable(cita != null);
-        btnActualizar.setDisable(cita == null);
-        btnEliminar.setDisable(cita == null);
         if (cita == null) {
             cmbCliente.setValue(null);
             dpFecha.setValue(null);
@@ -198,17 +219,18 @@ public class CitaTecnicaController {
             return;
         }
         try {
-            if (!citaDAO.insertar(leerFormulario())) {
-                AlertUtil.mostrarAdvertencia("Sin cambios", "No se pudo registrar la cita.");
-                return;
-            }
-            onLimpiar();
-            AlertUtil.mostrarInfo("Cita registrada", "La cita se guardó correctamente.");
-            cargarCitas();
+            CitaTecnica cita = leerFormulario();
+            tareas.ejecutar(() -> citaDAO.insertar(cita), guardada -> {
+                if (!guardada) {
+                    AlertUtil.mostrarAdvertencia("Sin cambios", "No se pudo registrar la cita.");
+                    return;
+                }
+                onLimpiar();
+                AlertUtil.mostrarInfo("Cita registrada", "La cita se guardó correctamente.");
+                cargarCitas();
+            }, e -> mostrarErrorBD("No se pudo guardar la cita.", e));
         } catch (IllegalArgumentException e) {
             AlertUtil.mostrarAdvertencia("Datos inválidos", e.getMessage());
-        } catch (SQLException e) {
-            mostrarErrorBD("No se pudo guardar la cita.", e);
         }
     }
 
@@ -218,17 +240,17 @@ public class CitaTecnicaController {
         try {
             CitaTecnica cita = leerFormulario();
             if (!AlertUtil.mostrarConfirmacion("Actualizar cita", "¿Desea guardar los cambios de la cita #" + cita.getIdCita() + "?")) return;
-            if (!citaDAO.actualizar(cita)) {
-                AlertUtil.mostrarAdvertencia("Sin cambios", "La cita ya no existe. Actualice el listado con Filtrar.");
-                return;
-            }
-            onLimpiar();
-            AlertUtil.mostrarInfo("Cita actualizada", "Los cambios se guardaron correctamente.");
-            cargarCitas();
+            tareas.ejecutar(() -> citaDAO.actualizar(cita), actualizada -> {
+                if (!actualizada) {
+                    AlertUtil.mostrarAdvertencia("Sin cambios", "La cita ya no existe. Actualice el listado con Filtrar.");
+                    return;
+                }
+                onLimpiar();
+                AlertUtil.mostrarInfo("Cita actualizada", "Los cambios se guardaron correctamente.");
+                cargarCitas();
+            }, e -> mostrarErrorBD("No se pudo actualizar la cita.", e));
         } catch (IllegalArgumentException e) {
             AlertUtil.mostrarAdvertencia("Datos inválidos", e.getMessage());
-        } catch (SQLException e) {
-            mostrarErrorBD("No se pudo actualizar la cita.", e);
         }
     }
 
@@ -238,17 +260,17 @@ public class CitaTecnicaController {
         Integer id = citaSeleccionada.getIdCita();
         if (!AlertUtil.mostrarConfirmacion("Eliminar cita", "¿Desea eliminar la cita #" + id + " de "
                 + citaSeleccionada.getNombreCliente() + "?")) return;
-        try {
-            if (!citaDAO.eliminar(id)) {
+        tareas.ejecutar(() -> citaDAO.eliminar(id), eliminada -> {
+            if (!eliminada) {
                 AlertUtil.mostrarAdvertencia("Sin cambios", "La cita ya no existe. Actualice el listado con Filtrar.");
                 return;
             }
             onLimpiar();
             AlertUtil.mostrarInfo("Cita eliminada", "La cita se eliminó correctamente.");
             cargarCitas();
-        } catch (SQLException e) {
+        }, e -> {
             mostrarErrorBD("No se pudo eliminar la cita.", e);
-        }
+        });
     }
 
     private boolean haySeleccion() {
@@ -285,16 +307,17 @@ public class CitaTecnicaController {
         cargarCitas();
     }
 
-    private void mostrarErrorBD(String mensaje, SQLException error) {
+    private void mostrarErrorBD(String mensaje, Throwable error) {
         LOG.log(System.Logger.Level.ERROR, mensaje, error);
         String detalle = "Verifique la conexión y vuelva a intentarlo.";
-        if ("23503".equals(error.getSQLState())) {
+        String estado = error instanceof SQLException sql ? sql.getSQLState() : null;
+        if ("23503".equals(estado)) {
             detalle = "El cliente seleccionado ya no existe. Vuelva a seleccionar un cliente.";
-        } else if ("22023".equals(error.getSQLState())) {
+        } else if ("22023".equals(estado)) {
             detalle = error.getMessage();
-        } else if ("23505".equals(error.getSQLState())) {
+        } else if ("23505".equals(estado)) {
             detalle = "Ya existe un registro con esos datos.";
-        } else if ("22001".equals(error.getSQLState())) {
+        } else if ("22001".equals(estado)) {
             detalle = "Uno de los campos supera la longitud permitida.";
         }
         AlertUtil.mostrarError("Error de base de datos", mensaje + "\n" + detalle);

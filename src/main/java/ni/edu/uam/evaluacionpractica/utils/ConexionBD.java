@@ -89,9 +89,8 @@ public final class ConexionBD {
 
     /** Prueba rápida de conectividad (útil para arrancar la app). */
     public static boolean probarConexion() {
-        try {
-            Connection cn = getConexion();
-            return cn != null && !cn.isClosed();
+        try (Connection cn = abrirConexion()) {
+            return cn.isValid(5);
         } catch (SQLException e) {
             System.err.println("[ConexionBD] Falló la prueba de conexión: " + e.getMessage());
             return false;

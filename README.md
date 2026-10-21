@@ -27,6 +27,37 @@ Desarrollar una aplicación de escritorio funcional que integre interfaces JavaF
 
 Los estados admitidos para una cita son **Pendiente**, **En proceso**, **Finalizada** y **Cancelada**.
 
+## Uso de hilos
+
+Las operaciones JDBC de clientes y citas (carga inicial, búsquedas, filtros, comprobaciones y CRUD),
+así como la prueba de conexión al iniciar, se ejecutan en segundo plano mediante `TareasBD`.
+Esta utilidad usa `Task` de JavaFX y un `ExecutorService` compartido con un máximo de tres hilos
+llamados `citas-bd-*`. Cada operación del DAO abre y cierra su propia conexión JDBC.
+
+Para observar los hilos durante la demostración, cada tarea espera seis segundos antes de
+ejecutar su operación. La consola muestra el nombre del hilo y la vista mantiene el indicador
+«Procesando datos...» mientras la ventana sigue respondiendo. La consulta puede añadir tiempo
+adicional. Para quitar esta pausa, cambiar `PAUSA_DEMOSTRACION_MS` a `0` en `TareasBD.java`.
+
+Los formularios se leen y validan en el hilo de JavaFX antes de enviar la tarea. Los resultados,
+las tablas y las alertas también se actualizan en JavaFX mediante los eventos de `Task`.
+Mientras una operación está pendiente, la vista correspondiente muestra «Procesando datos...»
+y deshabilita sus controles para evitar solicitudes duplicadas. El desplegable de clientes se
+refresca sin bloquear su apertura y conserva la selección actual. Al cerrar la aplicación se
+cancelan las tareas pendientes y se apaga el ejecutor sin esperar por JDBC en la interfaz.
+
+Las pruebas de concurrencia no requieren PostgreSQL y usan consultas simuladas detenidas con
+`CountDownLatch` para comprobar que JavaFX siga procesando eventos. Para ejecutarlas en una
+sesión de escritorio con JDK 21, usar PowerShell:
+
+```powershell
+$env:CITAS_TEST_FX = 'true'
+.\mvnw.cmd test
+```
+
+Las pruebas de persistencia siguen requiriendo una base desechable y `CITAS_TEST_DB=true`,
+según las instrucciones de `AUDITORIA_VALIDACIONES.md`.
+
 ## Tecnologías utilizadas
 
 - **Java:** lógica de la aplicación.

@@ -6,6 +6,7 @@ import javafx.scene.Scene;
 import javafx.stage.Stage;
 import ni.edu.uam.evaluacionpractica.utils.AlertUtil;
 import ni.edu.uam.evaluacionpractica.utils.ConexionBD;
+import ni.edu.uam.evaluacionpractica.utils.TareasBD;
 
 import java.io.IOException;
 
@@ -20,15 +21,18 @@ public class HelloApplication extends Application {
         stage.setScene(scene);
         stage.show();
 
-        if (!ConexionBD.probarConexion()) {
-            AlertUtil.mostrarError("Error de conexión",
-                    "No se pudo conectar con PostgreSQL. Verifique que el servidor esté en ejecución "
-                            + "y que las credenciales (DB_URL, DB_USER, DB_PASSWORD) sean correctas.");
-        }
+        new TareasBD().ejecutar(ConexionBD::probarConexion, conectada -> {
+            if (!conectada) {
+                AlertUtil.mostrarError("Error de conexión",
+                        "No se pudo conectar con PostgreSQL. Verifique que el servidor esté en ejecución "
+                                + "y que las credenciales (DB_URL, DB_USER, DB_PASSWORD) sean correctas.");
+            }
+        }, error -> AlertUtil.mostrarError("Error de conexión", "No se pudo comprobar la conexión con PostgreSQL."));
     }
 
     @Override
     public void stop() {
+        TareasBD.cerrar();
         ConexionBD.cerrar();
     }
 }
